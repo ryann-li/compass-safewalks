@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: safewalks
+      POSTGRES_PASSWORD: safewalks
+      POSTGRES_DB: safewalks
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safewalks"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db_data: {}
+
