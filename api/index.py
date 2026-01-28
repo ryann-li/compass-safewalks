@@ -8,6 +8,12 @@ from app.deps import error_response
 app = FastAPI(title="Compass SafeWalks API", version="1.0.0")
 
 
+@app.get("/")
+def root():
+    # Friendly root endpoint for Vercel root visits.
+    return {"ok": True}
+
+
 @app.get("/health")
 def health():
     return {"ok": True}
