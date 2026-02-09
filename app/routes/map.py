@@ -19,22 +19,16 @@ class FriendInfo(BaseModel):
     username: str
 
 
-class TowerInfo(BaseModel):
-    id: str
+class LocationInfo(BaseModel):
     lat: float
     lng: float
-
-
-class PingInfo(BaseModel):
     received_at: datetime
-    tower: TowerInfo
-    rssi: Optional[int] = None
 
 
 class MapResult(BaseModel):
     friend: FriendInfo
     fob_uid: str
-    ping: PingInfo
+    location: LocationInfo
 
 
 class MapLatestResponse(BaseModel):
@@ -53,23 +47,19 @@ def latest_map(
     if window_minutes is not None and window_minutes > 0:
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
 
-    # Use DISTINCT ON(fob_uid) to get latest ping per fob
-    # Join friendships -> fobs -> pings -> towers -> friend user
+    # Use DISTINCT ON(fobs.fob_uid) to get latest ping per fob
     sql = """
     SELECT DISTINCT ON (fobs.fob_uid)
         friend.id AS friend_id,
         friend.username AS friend_username,
         fobs.fob_uid AS fob_uid,
-        pings.received_at AS received_at,
-        pings.rssi AS rssi,
-        towers.id AS tower_id,
-        towers.lat AS tower_lat,
-        towers.lng AS tower_lng
+        pings.lat AS lat,
+        pings.lng AS lng,
+        pings.received_at AS received_at
     FROM friendships
     JOIN users AS friend ON friend.id = friendships.friend_id
     JOIN fobs ON fobs.owner_user_id = friend.id
     JOIN pings ON pings.fob_uid = fobs.fob_uid
-    JOIN towers ON towers.id = pings.tower_id
     WHERE friendships.user_id = :current_user_id
     """
 
@@ -91,14 +81,10 @@ def latest_map(
                     username=row["friend_username"],
                 ),
                 fob_uid=row["fob_uid"],
-                ping=PingInfo(
+                location=LocationInfo(
+                    lat=row["lat"],
+                    lng=row["lng"],
                     received_at=row["received_at"],
-                    rssi=row["rssi"],
-                    tower=TowerInfo(
-                        id=row["tower_id"],
-                        lat=row["tower_lat"],
-                        lng=row["tower_lng"],
-                    ),
                 ),
             )
         )

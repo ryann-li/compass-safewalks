@@ -1,6 +1,3 @@
-from datetime import datetime, timedelta, timezone
-
-
 TOWER_KEY = "test-tower-key"
 
 
@@ -36,12 +33,10 @@ def test_happy_path_end_to_end(client, monkeypatch):
     assert r.status_code == 200
 
     # tower posts ping for FOB_BOB
-    now = datetime.now(timezone.utc) - timedelta(minutes=1)
     ping_body = {
-        "tower_id": "tower-1",
         "fob_uid": FOB_BOB,
-        "tower_reported_at": now.isoformat(),
-        "rssi": -67,
+        "lat": 43.65,
+        "lng": -79.38,
     }
     r = client.post("/tower/pings", json=ping_body, headers={"X-Tower-Key": TOWER_KEY})
     assert r.status_code == 201, r.text
@@ -56,9 +51,9 @@ def test_happy_path_end_to_end(client, monkeypatch):
     res = results[0]
     assert res["friend"]["username"] == "bob"
     assert res["fob_uid"] == FOB_BOB
-    assert res["ping"]["tower"]["id"] == "tower-1"
-    assert "lat" in res["ping"]["tower"]
-    assert "lng" in res["ping"]["tower"]
+    assert res["location"]["lat"] == 43.65
+    assert res["location"]["lng"] == -79.38
+    assert "received_at" in res["location"]
 
 
 def test_mutual_friends_invariant(client, monkeypatch):
@@ -81,7 +76,7 @@ def test_mutual_friends_invariant(client, monkeypatch):
 def test_tower_auth_enforcement(client, monkeypatch):
     monkeypatch.setenv("TOWER_SHARED_KEY", TOWER_KEY)
 
-    body = {"tower_id": "tower-1", "fob_uid": "FOB_X"}
+    body = {"fob_uid": "FOB_X", "lat": 43.65, "lng": -79.38}
 
     # missing key
     r = client.post("/tower/pings", json=body)
@@ -91,10 +86,9 @@ def test_tower_auth_enforcement(client, monkeypatch):
     r = client.post("/tower/pings", json=body, headers={"X-Tower-Key": "wrong"})
     assert r.status_code == 401
 
-    # correct key but invalid tower
-    body["tower_id"] = "invalid-tower"
+    # correct key with unregistered fob — auto-registers and stores ping
     r = client.post("/tower/pings", json=body, headers={"X-Tower-Key": TOWER_KEY})
-    assert r.status_code == 404
+    assert r.status_code == 201
 
 
 def test_fob_uniqueness(client, monkeypatch):

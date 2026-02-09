@@ -57,9 +57,8 @@ _engine = create_engine(TEST_DB_URL)
 
 @pytest.fixture(autouse=True)
 def clean_db() -> None:
-    """Ensure a clean DB state before each test (except seeded towers)."""
+    """Ensure a clean DB state before each test."""
     with _engine.begin() as conn:
-        # Order matters less with CASCADE; leave towers as seeded.
         conn.execute(
             text(
                 "TRUNCATE TABLE pings, friendships, fobs, users RESTART IDENTITY CASCADE;"

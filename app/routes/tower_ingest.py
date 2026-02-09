@@ -1,23 +1,19 @@
-from datetime import datetime
-from typing import Optional
-
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import verify_tower_key, get_active_tower_or_error
-from ..models import Ping
+from ..deps import verify_tower_key
+from ..models import Ping, Fob
 
 
 router = APIRouter(prefix="/tower", tags=["tower"])
 
 
 class TowerPingRequest(BaseModel):
-    tower_id: str
     fob_uid: str
-    tower_reported_at: Optional[datetime] = None
-    rssi: Optional[int] = None
+    lat: float
+    lng: float
 
 
 class TowerPingResponse(BaseModel):
@@ -30,14 +26,17 @@ def ingest_ping(
     _: bool = Depends(verify_tower_key),
     db: Session = Depends(get_db),
 ):
-    # Validate tower exists and active
-    get_active_tower_or_error(payload.tower_id, db)
+    # Auto-register fob if it doesn't exist yet
+    fob = db.get(Fob, payload.fob_uid)
+    if not fob:
+        fob = Fob(fob_uid=payload.fob_uid)
+        db.add(fob)
+        db.flush()
 
     ping = Ping(
         fob_uid=payload.fob_uid,
-        tower_id=payload.tower_id,
-        rssi=payload.rssi,
-        tower_reported_at=payload.tower_reported_at,
+        lat=payload.lat,
+        lng=payload.lng,
     )
     db.add(ping)
     db.commit()

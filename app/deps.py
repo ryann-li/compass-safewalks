@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from .auth import decode_token
 from .db import get_db
-from .models import User, Tower
+from .models import User
 from .settings import get_settings
 
 
@@ -47,13 +47,4 @@ def verify_tower_key(
         error_response(status.HTTP_401_UNAUTHORIZED, "TOWER_UNAUTHORIZED", "Invalid tower key")
     # This dependency just validates the shared key; individual routes still validate tower_id etc.
     return True
-
-
-def get_active_tower_or_error(tower_id: str, db: Session) -> Tower:
-    tower = db.get(Tower, tower_id)
-    if not tower:
-        error_response(status.HTTP_404_NOT_FOUND, "TOWER_NOT_FOUND", "Tower not found")
-    if not tower.active:
-        error_response(status.HTTP_403_FORBIDDEN, "TOWER_INACTIVE", "Tower is inactive")
-    return tower
 

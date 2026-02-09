@@ -30,8 +30,17 @@ def claim_fob(
     if existing_for_user:
         error_response(status.HTTP_409_CONFLICT, "FOB_ALREADY_CLAIMED", "User already has a fob")
 
-    fob = Fob(fob_uid=payload.fob_uid, owner_user_id=current_user.id)
-    db.add(fob)
+    # Check if fob already exists (e.g. auto-registered by a tower ping)
+    fob = db.get(Fob, payload.fob_uid)
+    if fob:
+        if fob.owner_user_id is not None:
+            error_response(status.HTTP_409_CONFLICT, "FOB_CONFLICT", "Fob already claimed")
+        # Claim the existing unclaimed fob
+        fob.owner_user_id = current_user.id
+    else:
+        fob = Fob(fob_uid=payload.fob_uid, owner_user_id=current_user.id)
+        db.add(fob)
+
     try:
         db.commit()
     except IntegrityError:

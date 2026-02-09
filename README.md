@@ -5,7 +5,7 @@ Minimal FastAPI backend for Compass SafeWalks, serving both mobile clients and h
 ### Requirements
 
 - Python 3.x
-- Docker & docker-compose
+- PostgreSQL (see below)
 
 Install Python dependencies:
 
@@ -15,8 +15,30 @@ pip install -r requirements.txt
 
 ### Start Postgres
 
+You need a running PostgreSQL instance. Pick **one** of these options:
+
+**Option A — Homebrew (no Docker needed):**
+
 ```bash
-docker-compose up -d db
+brew install postgresql@16
+brew services start postgresql@16
+createuser -s safewalks
+createdb -U safewalks safewalks
+```
+
+**Option B — [Postgres.app](https://postgresapp.com/) (no Docker needed):**
+
+Download, launch, and create the database:
+
+```bash
+createuser -s safewalks
+createdb -U safewalks safewalks
+```
+
+**Option C — Docker:**
+
+```bash
+docker compose up -d db
 ```
 
 The default database URL is:
