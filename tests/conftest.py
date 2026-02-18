@@ -61,7 +61,7 @@ def clean_db() -> None:
     with _engine.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE TABLE pings, friendships, fobs, users RESTART IDENTITY CASCADE;"
+                "TRUNCATE TABLE incidents, pings, friendships, fobs, users RESTART IDENTITY CASCADE;"
             )
         )
 

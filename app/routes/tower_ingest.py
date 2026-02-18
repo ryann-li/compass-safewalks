@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -7,6 +9,8 @@ from ..deps import verify_tower_key
 from ..models import Ping, Fob
 
 
+logger = logging.getLogger("compass.tower")
+
 router = APIRouter(prefix="/tower", tags=["tower"])
 
 
@@ -14,6 +18,7 @@ class TowerPingRequest(BaseModel):
     fob_uid: str
     lat: float
     lng: float
+    status: int = 0  # 0=Safe, 1=Not Safe, 2=SOS
 
 
 class TowerPingResponse(BaseModel):
@@ -37,8 +42,20 @@ def ingest_ping(
         fob_uid=payload.fob_uid,
         lat=payload.lat,
         lng=payload.lng,
+        status=payload.status,
     )
     db.add(ping)
     db.commit()
+
+    # If SOS, log a prominent warning so ops can act on it
+    if payload.status == 2:
+        owner_id = fob.owner_user_id or "unregistered"
+        logger.warning(
+            "🚨 SOS ALERT: User %s at %s, %s",
+            owner_id,
+            payload.lat,
+            payload.lng,
+        )
+
     return TowerPingResponse(stored=True)
 

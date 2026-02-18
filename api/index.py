@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app.routes import auth, friends, fob, map as map_routes, tower_ingest
+from app.routes import auth, friends, fob, map as map_routes, tower_ingest, incidents
 from app.deps import error_response
 
 
@@ -42,4 +42,5 @@ app.include_router(friends.router)
 app.include_router(fob.router)
 app.include_router(map_routes.router)
 app.include_router(tower_ingest.router)
+app.include_router(incidents.router)
 

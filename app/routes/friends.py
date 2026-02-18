@@ -1,6 +1,9 @@
+from datetime import datetime
+from typing import Optional
+
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, text
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -18,6 +21,9 @@ class FriendUsernameRequest(BaseModel):
 class FriendOut(BaseModel):
     id: str
     username: str
+    display_name: str | None = None
+    profile_picture_url: str | None = None
+    latest_ping_received_at: datetime | None = None
 
 
 class FriendAddResponse(BaseModel):
@@ -31,6 +37,17 @@ class FriendRemoveResponse(BaseModel):
 
 class FriendListResponse(BaseModel):
     friends: list[FriendOut]
+
+
+class ShareLocationRequest(BaseModel):
+    username: str
+    enabled: bool
+
+
+class ShareLocationResponse(BaseModel):
+    updated: bool
+    username: str
+    is_sharing_location: bool
 
 
 @router.post("/add", response_model=FriendAddResponse)
@@ -55,7 +72,12 @@ def add_friend(
     db.commit()
     return FriendAddResponse(
         added=True,
-        friend=FriendOut(id=friend.id, username=friend.username),
+        friend=FriendOut(
+            id=friend.id,
+            username=friend.username,
+            display_name=friend.display_name,
+            profile_picture_url=friend.profile_picture_url,
+        ),
     )
 
 
@@ -83,13 +105,65 @@ def list_friends(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    stmt = (
-        select(User)
-        .join(Friendship, Friendship.friend_id == User.id)
-        .where(Friendship.user_id == current_user.id)
-        .order_by(User.username)
-    )
-    rows = db.scalars(stmt).all()
-    friends = [FriendOut(id=u.id, username=u.username) for u in rows]
+    # Join friends with their latest ping received_at via fobs -> pings
+    sql = """
+    SELECT
+        u.id,
+        u.username,
+        u.display_name,
+        u.profile_picture_url,
+        latest_ping.received_at AS latest_ping_received_at
+    FROM friendships f
+    JOIN users u ON u.id = f.friend_id
+    LEFT JOIN LATERAL (
+        SELECT p.received_at
+        FROM fobs
+        JOIN pings p ON p.fob_uid = fobs.fob_uid
+        WHERE fobs.owner_user_id = u.id
+        ORDER BY p.received_at DESC
+        LIMIT 1
+    ) latest_ping ON true
+    WHERE f.user_id = :current_user_id
+    ORDER BY u.username
+    """
+    rows = db.execute(text(sql), {"current_user_id": current_user.id}).mappings().all()
+
+    friends = [
+        FriendOut(
+            id=str(row["id"]),
+            username=row["username"],
+            display_name=row["display_name"],
+            profile_picture_url=row["profile_picture_url"],
+            latest_ping_received_at=row["latest_ping_received_at"],
+        )
+        for row in rows
+    ]
     return FriendListResponse(friends=friends)
+
+
+@router.patch("/share-location", response_model=ShareLocationResponse)
+def toggle_share_location(
+    payload: ShareLocationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Toggle location sharing for a specific friend relationship."""
+    friend = db.scalar(select(User).where(User.username == payload.username))
+    if not friend:
+        error_response(status.HTTP_404_NOT_FOUND, "USER_NOT_FOUND", "Friend user not found")
+
+    friendship = db.get(Friendship, {"user_id": current_user.id, "friend_id": friend.id})
+    if not friendship:
+        error_response(status.HTTP_404_NOT_FOUND, "FRIENDSHIP_NOT_FOUND", "Friendship does not exist")
+
+    friendship.is_sharing_location = payload.enabled
+    db.add(friendship)
+    db.commit()
+    db.refresh(friendship)
+
+    return ShareLocationResponse(
+        updated=True,
+        username=friend.username,
+        is_sharing_location=friendship.is_sharing_location,
+    )
 

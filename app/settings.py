@@ -6,6 +6,7 @@ class Settings:
     JWT_SECRET: str
     JWT_EXP_SECONDS: int
     TOWER_SHARED_KEY: str
+    BLOB_READ_WRITE_TOKEN: str
 
     def __init__(self) -> None:
         self.DATABASE_URL = os.getenv(
@@ -15,6 +16,7 @@ class Settings:
         self.JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-me")
         self.JWT_EXP_SECONDS = int(os.environ.get("JWT_EXP_SECONDS", "3600"))
         self.TOWER_SHARED_KEY = os.environ.get("TOWER_SHARED_KEY", "dev-tower-key")
+        self.BLOB_READ_WRITE_TOKEN = os.environ.get("BLOB_READ_WRITE_TOKEN", "")
 
 
 def get_settings() -> Settings:

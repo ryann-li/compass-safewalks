@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Text, Index, text, Float, desc
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Text, Index, text, Float, desc
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
@@ -18,6 +18,8 @@ class User(Base):
     )
     username: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    display_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    profile_picture_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -42,6 +44,9 @@ class Friendship(Base):
         UUID(as_uuid=False),
         ForeignKey("users.id", ondelete="CASCADE"),
         primary_key=True,
+    )
+    is_sharing_location: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
@@ -82,6 +87,9 @@ class Ping(Base):
     )
     lat: Mapped[float] = mapped_column(Float(precision=53), nullable=False)
     lng: Mapped[float] = mapped_column(Float(precision=53), nullable=False)
+    status: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )  # 0=Safe, 1=Not Safe, 2=SOS
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -91,5 +99,32 @@ class Ping(Base):
     __table_args__ = (
         Index("ix_pings_fob_uid_received_at_desc", "fob_uid", desc("received_at")),
         Index("ix_pings_received_at_desc", desc("received_at")),
+    )
+
+
+class Incident(Base):
+    __tablename__ = "incidents"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    reporter_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    lat: Mapped[float] = mapped_column(Float(precision=53), nullable=False)
+    lng: Mapped[float] = mapped_column(Float(precision=53), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    reporter: Mapped["User"] = relationship("User")
+
+    __table_args__ = (
+        Index("ix_incidents_reporter_id", "reporter_id"),
     )
 
