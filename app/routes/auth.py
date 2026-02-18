@@ -80,7 +80,7 @@ def get_upload_url(
     current_user: User = Depends(get_current_user),
 ):
     """Generate a signed client-upload URL for Vercel Blob storage."""
-    import hashlib, time, hmac
+    import json
     from urllib.parse import quote
 
     settings = get_settings()
@@ -96,26 +96,48 @@ def get_upload_url(
     safe_filename = quote(filename, safe="")
     pathname = f"avatars/{current_user.id}/{safe_filename}"
 
-    # Use the vercel_blob client-upload helper when available, otherwise
-    # construct a minimal signed upload URL ourselves.
+    # Use Vercel Blob REST API to generate a presigned upload URL
     try:
-        from vercel_blob import put
-
-        result = put(
-            pathname,
-            data=b"",  # placeholder; client will PUT the real data
-            options={
-                "access": "public",
-                "token": token,
-                "multipart": True,
-                "addRandomSuffix": True,
-            },
+        # Call Vercel Blob API to get presigned upload URL
+        blob_api_url = "https://blob.vercel-storage.com"
+        
+        # Request a presigned upload URL from Vercel Blob
+        upload_request = {
+            "pathname": pathname,
+            "type": "put",
+            "access": "public",
+            "addRandomSuffix": True
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        
+        import requests
+        response = requests.post(
+            f"{blob_api_url}/",
+            json=upload_request,
+            headers=headers,
+            timeout=10
         )
-        return UploadUrlResponse(upload_url=result["url"], blob_url=result["url"])
-    except ImportError:
+        
+        if response.status_code == 200:
+            result = response.json()
+            # Vercel Blob returns { url, uploadUrl } - url is the final blob URL, uploadUrl is for PUT
+            return UploadUrlResponse(
+                upload_url=result.get("uploadUrl", result["url"]), 
+                blob_url=result["url"]
+            )
+        else:
+            # Fallback to manual presigned URL
+            raise Exception(f"Blob API failed: {response.status_code}")
+            
+    except Exception:
         pass
 
     # Fallback: construct a simple pre-signed URL using HMAC
+    import hashlib, time, hmac
     ts = str(int(time.time()))
     mac = hmac.new(token.encode(), f"{pathname}:{ts}".encode(), hashlib.sha256).hexdigest()
     upload_url = f"https://blob.vercel-storage.com/{pathname}?signature={mac}&t={ts}"

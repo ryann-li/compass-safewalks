@@ -8,4 +8,5 @@ passlib[bcrypt,argon2]
 python-dotenv
 pytest
 httpx
+requests
 vercel-blob
