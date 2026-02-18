@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, File, Form, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+import httpx
 
 from ..auth import hash_password, verify_password, create_access_token
 from ..db import get_db
@@ -29,21 +30,11 @@ class AuthResponse(BaseModel):
     user: UserOut
 
 
-class UpdateProfileRequest(BaseModel):
-    display_name: str | None = None
-    profile_picture_url: str | None = None
-
-
 class ProfileOut(BaseModel):
     id: str
     username: str
     display_name: str | None = None
     profile_picture_url: str | None = None
-
-
-class UploadUrlResponse(BaseModel):
-    upload_url: str
-    blob_url: str
 
 
 _ALLOWED_BLOB_HOSTS = {"public.blob.vercel-storage.com", "blob.vercel-storage.com"}
@@ -74,99 +65,105 @@ def login(payload: SignupRequest, db: Session = Depends(get_db)):
     return AuthResponse(access_token=token, user=UserOut(id=user.id, username=user.username))
 
 
-@router.get("/storage/upload-url", response_model=UploadUrlResponse)
-def get_upload_url(
-    filename: str,
+@router.get("/me", response_model=ProfileOut)
+def get_profile(
     current_user: User = Depends(get_current_user),
 ):
-    """Generate a signed client-upload URL for Vercel Blob storage."""
-    import json
-    from urllib.parse import quote
-
-    settings = get_settings()
-    token = settings.BLOB_READ_WRITE_TOKEN
-    if not token:
-        error_response(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "STORAGE_UNAVAILABLE",
-            "Blob storage is not configured",
-        )
-
-    # Build a unique pathname scoped to the user
-    safe_filename = quote(filename, safe="")
-    pathname = f"avatars/{current_user.id}/{safe_filename}"
-
-    # Use Vercel Blob REST API to generate a presigned upload URL
-    try:
-        # Call Vercel Blob API to get presigned upload URL
-        blob_api_url = "https://blob.vercel-storage.com"
-        
-        # Request a presigned upload URL from Vercel Blob
-        upload_request = {
-            "pathname": pathname,
-            "type": "put",
-            "access": "public",
-            "addRandomSuffix": True
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
-        
-        import requests
-        response = requests.post(
-            f"{blob_api_url}/",
-            json=upload_request,
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            # Vercel Blob returns { url, uploadUrl } - url is the final blob URL, uploadUrl is for PUT
-            return UploadUrlResponse(
-                upload_url=result.get("uploadUrl", result["url"]), 
-                blob_url=result["url"]
-            )
-        else:
-            # Fallback to manual presigned URL
-            raise Exception(f"Blob API failed: {response.status_code}")
-            
-    except Exception:
-        pass
-
-    # Fallback: construct a simple pre-signed URL using HMAC
-    import hashlib, time, hmac
-    ts = str(int(time.time()))
-    mac = hmac.new(token.encode(), f"{pathname}:{ts}".encode(), hashlib.sha256).hexdigest()
-    upload_url = f"https://blob.vercel-storage.com/{pathname}?signature={mac}&t={ts}"
-    blob_url = f"https://public.blob.vercel-storage.com/{pathname}"
-    return UploadUrlResponse(upload_url=upload_url, blob_url=blob_url)
+    """Get the current user's profile."""
+    return ProfileOut(
+        id=current_user.id,
+        username=current_user.username,
+        display_name=current_user.display_name,
+        profile_picture_url=current_user.profile_picture_url,
+    )
 
 
 @router.patch("/me", response_model=ProfileOut)
-def update_profile(
-    payload: UpdateProfileRequest,
+async def update_profile(
+    display_name: str | None = Form(None),
+    profile_picture: UploadFile | None = File(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Update the current user's display_name and/or profile_picture_url."""
-    from urllib.parse import urlparse
+    """Update the current user's display_name and/or profile_picture via multipart/form-data."""
+    import time
+    from urllib.parse import quote
+    
+    # Handle profile picture upload if provided
+    if profile_picture is not None:
+        settings = get_settings()
+        token = settings.BLOB_READ_WRITE_TOKEN
+        if not token:
+            error_response(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "STORAGE_UNAVAILABLE",
+                "Blob storage is not configured",
+            )
 
-    if payload.profile_picture_url is not None:
-        parsed = urlparse(payload.profile_picture_url)
-        if parsed.hostname not in _ALLOWED_BLOB_HOSTS:
+        # Validate file type
+        allowed_types = {"image/jpeg", "image/png", "image/webp"}
+        if not profile_picture.content_type or profile_picture.content_type not in allowed_types:
             error_response(
                 status.HTTP_400_BAD_REQUEST,
-                "INVALID_URL",
-                "profile_picture_url must be hosted on Vercel Blob storage",
+                "INVALID_FILE_TYPE",
+                "File must be an image (JPEG, PNG, or WebP)",
             )
-        current_user.profile_picture_url = payload.profile_picture_url
+        
+        # Validate file size (max 5MB)
+        MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+        file_content = await profile_picture.read()
+        if len(file_content) > MAX_FILE_SIZE:
+            error_response(
+                status.HTTP_400_BAD_REQUEST,
+                "FILE_TOO_LARGE",
+                "File size must be less than 5MB",
+            )
+        
+        try:
+            # Generate unique filename with timestamp
+            timestamp = int(time.time())
+            file_ext = profile_picture.filename.split(".")[-1] if "." in profile_picture.filename else "jpg"
+            safe_filename = f"{current_user.id}_{timestamp}.{file_ext}"
+            blob_filename = f"avatars/{safe_filename}"
+            
+            # Server-side upload directly to Vercel Blob using httpx
+            blob_url = f"https://blob.vercel-storage.com/{quote(blob_filename)}"
+            
+            async with httpx.AsyncClient() as client:
+                upload_response = await client.put(
+                    blob_url,
+                    content=file_content,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": profile_picture.content_type,
+                        "x-content-type": profile_picture.content_type,
+                    },
+                    timeout=30.0
+                )
+            
+            if upload_response.status_code in [200, 201]:
+                # Generate the public URL and update user profile
+                public_blob_url = f"https://public.blob.vercel-storage.com/{blob_filename}"
+                current_user.profile_picture_url = public_blob_url
+            else:
+                error_response(
+                    status.HTTP_502_BAD_GATEWAY,
+                    "UPLOAD_FAILED",
+                    f"Failed to upload to blob storage: {upload_response.status_code} {upload_response.text}",
+                )
+                
+        except Exception as e:
+            error_response(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "UPLOAD_ERROR",
+                f"Upload failed: {str(e)}",
+            )
 
-    if payload.display_name is not None:
-        current_user.display_name = payload.display_name
+    # Update display name if provided
+    if display_name is not None:
+        current_user.display_name = display_name
 
+    # Save changes to database
     db.add(current_user)
     db.commit()
     db.refresh(current_user)

@@ -7,6 +7,7 @@ against the new safety features implemented.
 """
 
 import sys
+import token
 import requests
 import json
 import time
@@ -68,44 +69,130 @@ def test_health():
         die(f"Health check failed: {r.status_code} {r.text}")
 
 def test_profile_features():
-    """Test profile picture upload URL generation and profile updates."""
+    """Test unified PATCH /auth/me endpoint with multipart/form-data."""
     info("Testing profile features...")
     
     timestamp = int(time.time())
     username = f"testuser_profile_{timestamp}"
     token = get_token(username)
     
-    # Test GET /auth/storage/upload-url
-    r = req("GET", f"{BASE}/auth/storage/upload-url", 
-            params={"filename": "avatar.png"}, 
+    # Test 1: Update display name only
+    info("Testing display name update...")
+    files = {'display_name': (None, 'Test User Display')}  # Form field without file
+    r = req("PATCH", f"{BASE}/auth/me", 
+            files=files, 
             headers=auth_headers(token))
-    print(f"Upload URL response: {r.status_code} {r.text}")
+    
     if r.status_code == 200:
-        body = r.json()
-        if "upload_url" in body and "blob_url" in body:
-            success("Upload URL generation works")
+        profile = r.json()
+        if profile.get("display_name") == "Test User Display":
+            success("Display name update works")
         else:
-            die(f"Upload URL response missing fields: {body}")
-    elif r.status_code == 503:
-        info("Upload URL unavailable (BLOB_READ_WRITE_TOKEN not configured) - expected in prod")
+            die(f"Display name update failed: expected 'Test User Display', got {profile.get('display_name')}")
     else:
-        die(f"Upload URL failed: {r.status_code} {r.text}")
+        die(f"Display name update failed: {r.status_code} {r.text}")
     
-    # Test PATCH /auth/me with mock blob URL
-    # mock_pic_url = "https://public.blob.vercel-storage.com/avatars/test/avatar.png"
-    # r = req("PATCH", f"{BASE}/auth/me",
-    #         json={"display_name": "Test User", "profile_picture_url": mock_pic_url},
-    #         headers=auth_headers(token))
+    # Test 2: Upload avatar with real file
+    info("Testing avatar upload with real file...")
     
-    # if r.status_code == 200:
-    #     profile = r.json()
-    #     if (profile.get("display_name") == "Test User" and 
-    #         profile.get("profile_picture_url") == mock_pic_url):
-    #         success("Profile update works")
-    #     else:
-    #         die(f"Profile update data mismatch: {profile}")
-    # else:
-    #     die(f"Profile update failed: {r.status_code} {r.text}")
+    # Use the provided test file
+    test_file_path = "/Users/ryanli/Desktop/peter.png"
+    try:
+        with open(test_file_path, 'rb') as f:
+            files = {
+                'profile_picture': ('peter.png', f, 'image/png'),
+                'display_name': (None, 'Peter with Avatar')
+            }
+            
+            r = req("PATCH", f"{BASE}/auth/me",
+                    files=files,
+                    headers=auth_headers(token))
+        
+        if r.status_code == 200:
+            profile = r.json()
+            if (profile.get("display_name") == "Peter with Avatar" and 
+                profile.get("profile_picture_url") and
+                "public.blob.vercel-storage.com" in profile.get("profile_picture_url")):
+                success("Avatar upload with file works")
+                
+                # Verify the uploaded image is accessible
+                info("Verifying uploaded image accessibility...")
+                verify_response = req("GET", profile["profile_picture_url"])
+                
+                if verify_response.status_code == 200:
+                    success("Uploaded image is accessible")
+                else:
+                    die(f"Uploaded image not accessible: {verify_response.status_code}")
+                    
+            else:
+                die(f"Avatar upload response invalid: {profile}")
+        elif r.status_code == 503:
+            info("Avatar upload unavailable (BLOB_READ_WRITE_TOKEN not configured) - expected in some environments")
+        else:
+            die(f"Avatar upload failed: {r.status_code} {r.text}")
+            
+    except FileNotFoundError:
+        info(f"Test file not found at {test_file_path} - skipping real file upload test")
+        info("You can place a PNG file at /Users/ryanli/Desktop/peter.png to test file uploads")
+    except Exception as e:
+        die(f"Avatar upload test error: {e}")
+    
+    # Test 3: Test with simulated image data (fallback)
+    info("Testing avatar upload with simulated image data...")
+    
+    # Create a minimal PNG-like binary data for testing
+    fake_png_data = b'\x89PNG\r\n\x1a\n' + b'fake-png-data-for-testing' * 100  # Simulate a small PNG
+    
+    files = {
+        'profile_picture': ('test_avatar.png', fake_png_data, 'image/png'),
+        'display_name': (None, 'Test User with Simulated Avatar')
+    }
+    
+    r = req("PATCH", f"{BASE}/auth/me",
+            files=files,
+            headers=auth_headers(token))
+    
+    if r.status_code == 200:
+        profile = r.json()
+        if (profile.get("display_name") == "Test User with Simulated Avatar" and 
+            profile.get("profile_picture_url")):
+            success("Avatar upload with simulated data works")
+        else:
+            die(f"Simulated avatar upload response invalid: {profile}")
+    elif r.status_code == 503:
+        info("Avatar upload unavailable (BLOB_READ_WRITE_TOKEN not configured) - expected in some environments")
+    else:
+        die(f"Simulated avatar upload failed: {r.status_code} {r.text}")
+    
+    # Test 4: Test validation errors
+    info("Testing file validation...")
+    
+    # Test with invalid file type
+    files = {
+        'profile_picture': ('test.txt', b'not an image', 'text/plain'),
+        'display_name': (None, 'Should Fail')
+    }
+    
+    r = req("PATCH", f"{BASE}/auth/me",
+            files=files,
+            headers=auth_headers(token))
+    
+    if r.status_code == 400 and "INVALID_FILE_TYPE" in r.text:
+        success("File type validation works")
+    elif r.status_code == 503:
+        info("Can't test validation when blob storage unavailable")
+    else:
+        die(f"File type validation failed: expected 400, got {r.status_code} {r.text}")
+    
+    # Test 5: Profile retrieval to verify current state  
+    info("Verifying final profile state...")
+    r = req("GET", f"{BASE}/auth/me", headers=auth_headers(token))
+    
+    if r.status_code == 200:
+        profile = r.json()
+        success(f"Final profile: {profile.get('display_name')} with avatar: {bool(profile.get('profile_picture_url'))}")
+    else:
+        die(f"Profile retrieval failed: {r.status_code} {r.text}")
 
 def test_location_privacy():
     """Test location sharing privacy controls."""
