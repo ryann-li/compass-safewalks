@@ -7,11 +7,9 @@ against the new safety features implemented.
 """
 
 import sys
-import token
 import requests
-import json
 import time
-from typing import Dict, Any
+from typing import Dict
 
 
 BASE = "https://compass-safewalks.vercel.app"
@@ -112,11 +110,14 @@ def test_profile_features():
             profile = r.json()
             if (profile.get("display_name") == "Peter with Avatar" and 
                 profile.get("profile_picture_url") and
-                "public.blob.vercel-storage.com" in profile.get("profile_picture_url")):
-                success("Avatar upload with file works")
+                "vercel-storage.com" in profile.get("profile_picture_url")):
+                success(f"Avatar upload with file works → {profile['profile_picture_url']}")
                 
                 # Verify the uploaded image is accessible
                 info("Verifying uploaded image accessibility...")
+                print("profile url is at:", profile["profile_picture_url"], profile)
+                
+                
                 verify_response = req("GET", profile["profile_picture_url"])
                 
                 if verify_response.status_code == 200:
@@ -467,7 +468,7 @@ def main():
     
     try:
         test_health()
-        # test_profile_features()
+        test_profile_features()
         # test_location_privacy()
         # test_sos_alerting()
         # test_incident_reporting()

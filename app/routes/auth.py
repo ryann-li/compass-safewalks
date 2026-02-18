@@ -142,8 +142,15 @@ async def update_profile(
                 )
             
             if upload_response.status_code in [200, 201]:
-                # Generate the public URL and update user profile
-                public_blob_url = f"https://public.blob.vercel-storage.com/{blob_filename}"
+                # Use the actual URL returned by Vercel Blob (includes content hash)
+                blob_resp = upload_response.json()
+                public_blob_url = blob_resp.get("url", "")
+                if not public_blob_url:
+                    error_response(
+                        status.HTTP_502_BAD_GATEWAY,
+                        "UPLOAD_FAILED",
+                        "Blob storage did not return a URL",
+                    )
                 current_user.profile_picture_url = public_blob_url
             else:
                 error_response(
