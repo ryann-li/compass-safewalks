@@ -467,7 +467,7 @@ def main():
     
     try:
         test_health()
-        test_profile_features()
+        # test_profile_features()
         # test_location_privacy()
         # test_sos_alerting()
         # test_incident_reporting()

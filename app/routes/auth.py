@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, status, File, Form, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-import httpx
 
 from ..auth import hash_password, verify_password, create_access_token
 from ..db import get_db
@@ -88,6 +87,7 @@ async def update_profile(
     """Update the current user's display_name and/or profile_picture via multipart/form-data."""
     import time
     from urllib.parse import quote
+    import httpx
     
     # Handle profile picture upload if provided
     if profile_picture is not None:
