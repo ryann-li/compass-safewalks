@@ -99,7 +99,7 @@ def latest_map(
     sql += " ORDER BY fobs.fob_uid, pings.received_at DESC"
 
     # Compile and log the raw SQL with actual parameters substituted
-    compiled_sql = text(sql).bindparam(**params)
+    compiled_sql = text(sql).bindparams(**params)
     try:
         # Get the compiled SQL with literal parameter substitution
         compiled_query = compiled_sql.compile(
