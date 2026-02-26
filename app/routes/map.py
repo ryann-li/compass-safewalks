@@ -117,7 +117,7 @@ def latest_map(
     
     # log rows returned from query
     print(f"RYAN: SQL returned {len(rows)} rows")
-    print("RYAN: query executed is:", text(sql))
+    print(f"RYAN: query executed is: {sql}")
     
 
     results: list[MapResult] = []
