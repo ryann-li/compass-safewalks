@@ -11,3 +11,4 @@ httpx
 python-multipart
 requests
 vercel-blob
+twilio

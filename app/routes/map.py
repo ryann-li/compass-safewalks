@@ -99,25 +99,10 @@ def latest_map(
 
     sql += " ORDER BY fobs.fob_uid, pings.received_at DESC"
 
-    # Compile and log the raw SQL with actual parameters substituted
-    compiled_sql = text(sql).bindparams(**params)
-    try:
-        # Get the compiled SQL with literal parameter substitution
-        compiled_query = compiled_sql.compile(
-            dialect=db.bind.dialect,
-            compile_kwargs={"literal_binds": True}
-        )
-        print(f"🗄️RYAN: RAW SQL WITH PARAMS: {compiled_query}")
-    except Exception as e:
-        print(f"⚠️  Could not compile SQL for logging: {e}")
-        print(f"📝 SQL Template: {sql}")
-        print(f"📝 Parameters: {params}")
-
     rows = db.execute(text(sql), params).mappings().all()
     
     # log rows returned from query
     print(f"RYAN: SQL returned {len(rows)} rows")
-    print(f"RYAN: query executed is: {sql}")
     
 
     results: list[MapResult] = []

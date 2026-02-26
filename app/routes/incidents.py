@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import get_current_user
 from ..models import Incident, User
+# from ..sms import send_sos_sms
 
 
 logger = logging.getLogger("compass.incidents")
@@ -148,7 +149,7 @@ def create_user_sos(
     db.commit()
     db.refresh(incident)
     
-    # Log prominently for operations team (similar to tower SOS)
+    # Log prominently for operations team (similar to tower SOS)    
     logger.warning(
         "🚨 USER SOS ALERT: User %s (%s) at %s, %s - Message: %s",
         current_user.id,
@@ -157,6 +158,34 @@ def create_user_sos(
         payload.lng,
         payload.message or "No message provided",
     )
+    
+    # Check if user has recent SOS incidents (within last 10 minutes) to avoid SMS spam
+    from sqlalchemy import desc
+    ten_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
+    recent_sos = db.query(Incident).filter(
+        Incident.reporter_id == current_user.id,
+        Incident.description.like("🚨%SOS%"),
+        Incident.created_at >= ten_minutes_ago
+    ).first()
+    
+    should_send_sms = recent_sos is None
+    
+    # Send SMS alert via Twilio only if no recent SOS
+    if should_send_sms:
+        user_info = f"{current_user.username} (ID: {current_user.id})"
+        # sms_success = send_sos_sms(
+        #     user_info=user_info,
+        #     lat=payload.lat,
+        #     lng=payload.lng,
+        #     message=payload.message,
+        #     alert_type="USER SOS"
+        # )
+        sms_success = True  # Mock success for now
+        
+        if not sms_success:
+            logger.error("Failed to send SOS SMS alert")
+    else:
+        logger.info(f"Skipping SMS - User {current_user.username} already has recent SOS alert")
     
     return SOSResponse(
         id=incident.id,
