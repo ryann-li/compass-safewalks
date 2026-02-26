@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import verify_tower_key
-from ..models import Ping, Fob
+from ..models import Ping, Fob, Incident
 
 
 logger = logging.getLogger("compass.tower")
@@ -45,9 +45,8 @@ def ingest_ping(
         status=payload.status,
     )
     db.add(ping)
-    db.commit()
-
-    # If SOS, log a prominent warning so ops can act on it
+    
+    # If SOS, log a prominent warning and create incident if fob is registered
     if payload.status == 2:
         owner_id = fob.owner_user_id or "unregistered"
         logger.warning(
@@ -56,6 +55,18 @@ def ingest_ping(
             payload.lat,
             payload.lng,
         )
+        
+        # Create an incident if the fob is registered to a user
+        if fob.owner_user_id:
+            incident = Incident(
+                reporter_id=fob.owner_user_id,
+                lat=payload.lat,
+                lng=payload.lng,
+                description=f"🚨 FOB SOS ALERT from fob {payload.fob_uid}",
+            )
+            db.add(incident)
+    
+    db.commit()
 
     return TowerPingResponse(stored=True)
 

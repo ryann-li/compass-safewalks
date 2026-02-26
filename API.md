@@ -93,11 +93,17 @@
 
 ### Incidents *(JWT required)*
 
-| Method | Endpoint | Body | Success |
-|--------|----------|------|---------|
+| Method | Endpoint | Body / Params | Success |
+|--------|----------|---------------|---------|
 | POST | `/incidents` | `{ "lat", "lng", "description" }` | 201: `{ id, reporter_id, lat, lng, description, created_at }` |
+| GET | `/incidents` | Query: `window_hours` (optional, int) | 200: `{ window_hours, incidents: [{ id, reporter: { id, username, display_name }, lat, lng, description, created_at }] }` |
+| POST | `/incidents/sos` | `{ "lat", "lng", "message"? }` | 201: `{ id, lat, lng, message, created_at }` |
 
-> Report a community safety incident at a given location.
+> **`POST /incidents`** — Report a community safety incident at a given location.
+>
+> **`GET /incidents`** — Retrieve community safety incidents with optional time filtering. If `window_hours` is omitted or `0`, all incidents are returned. Returns incidents with reporter information (username and display name).
+>
+> **`POST /incidents/sos`** — Create an SOS alert from a user without requiring a fob. The `message` field is optional for providing additional context. The alert is logged prominently for operations and stored as a special incident.
 
 ---
 
