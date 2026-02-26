@@ -83,7 +83,8 @@ def latest_map(
          ON friend_fs.user_id = friend.id
         AND friend_fs.friend_id = viewer_fs.user_id
     JOIN fobs ON fobs.owner_user_id = friend.id
-    JOIN pings ON pings.fob_uid = fobs.fob_uid
+    -- Change JOIN to LEFT JOIN here:
+    LEFT JOIN pings ON pings.fob_uid = fobs.fob_uid
     WHERE viewer_fs.user_id = :current_user_id
       AND friend_fs.is_sharing_location = true
     """
