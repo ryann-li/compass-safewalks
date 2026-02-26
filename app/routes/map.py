@@ -87,6 +87,9 @@ def latest_map(
     WHERE viewer_fs.user_id = :current_user_id
       AND friend_fs.is_sharing_location = true
     """
+    
+    # log sql query
+    # print(f"Executing SQL: {sql}")
 
     params: dict = {"current_user_id": current_user.id}
     if cutoff is not None:
@@ -96,6 +99,10 @@ def latest_map(
     sql += " ORDER BY fobs.fob_uid, pings.received_at DESC"
 
     rows = db.execute(text(sql), params).mappings().all()
+    
+    # log rows returned from query
+    print(f"SQL returned {len(rows)} rows")
+    print("query executed is:", text(sql))
 
     results: list[MapResult] = []
     for row in rows:
@@ -115,6 +122,7 @@ def latest_map(
             )
         )
 
+    print(results)
     # Normalize window_minutes in response: null for infinite window
     window_value = window_minutes if (window_minutes is not None and window_minutes > 0) else None
     return MapLatestResponse(window_minutes=window_value, results=results)
