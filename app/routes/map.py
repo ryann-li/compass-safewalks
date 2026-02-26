@@ -115,8 +115,8 @@ def latest_map(
     rows = db.execute(text(sql), params).mappings().all()
     
     # log rows returned from query
-    print(f"SQL returned {len(rows)} rows")
-    print("query executed is:", text(sql))
+    print(f"RYAN: SQL returned {len(rows)} rows")
+    print("RYAN: query executed is:", text(sql))
     
 
     results: list[MapResult] = []
