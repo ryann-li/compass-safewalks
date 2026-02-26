@@ -37,6 +37,20 @@ class MapLatestResponse(BaseModel):
     results: list[MapResult]
 
 
+class PingInfo(BaseModel):
+    id: int
+    fob_uid: str
+    lat: float
+    lng: float
+    status: int  # 0=Safe, 1=Not Safe, 2=SOS
+    received_at: datetime
+
+
+class AllPingsResponse(BaseModel):
+    window_minutes: Optional[int] = None
+    pings: list[PingInfo]
+
+
 @router.get("/latest", response_model=MapLatestResponse)
 def latest_map(
     window_minutes: Optional[int] = None,
@@ -104,4 +118,42 @@ def latest_map(
     # Normalize window_minutes in response: null for infinite window
     window_value = window_minutes if (window_minutes is not None and window_minutes > 0) else None
     return MapLatestResponse(window_minutes=window_value, results=results)
+
+
+@router.get("/pings", response_model=AllPingsResponse)
+def get_all_pings(
+    window_minutes: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all pings from the database with optional time filtering."""
+    # Import Ping model here to avoid circular imports
+    from ..models import Ping
+    
+    query = db.query(Ping)
+    
+    # Apply time filter if specified
+    if window_minutes is not None and window_minutes > 0:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        query = query.filter(Ping.received_at >= cutoff)
+    
+    # Order by most recent first
+    pings = query.order_by(Ping.received_at.desc()).all()
+    
+    ping_results = []
+    for ping in pings:
+        ping_results.append(
+            PingInfo(
+                id=ping.id,
+                fob_uid=ping.fob_uid,
+                lat=ping.lat,
+                lng=ping.lng,
+                status=ping.status,
+                received_at=ping.received_at,
+            )
+        )
+    
+    # Normalize window_minutes in response: null for infinite window
+    window_value = window_minutes if (window_minutes is not None and window_minutes > 0) else None
+    return AllPingsResponse(window_minutes=window_value, pings=ping_results)
 

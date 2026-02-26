@@ -82,12 +82,13 @@
 | Method | Endpoint | Params | Success |
 |--------|----------|--------|---------|
 | GET | `/map/latest` | `window_minutes` (optional, int) | 200: `{ window_minutes, results: [{ friend: { id, username }, fob_uid, location: { lat, lng, status, received_at } }] }` |
+| GET | `/map/pings` | `window_minutes` (optional, int) | 200: `{ window_minutes, pings: [{ id, fob_uid, lat, lng, status, received_at }] }` |
 
-> Only returns data for friends whose **reverse** friendship row has `is_sharing_location = true` (i.e. the friend has opted to share with you).
+> **`GET /map/latest`** — Only returns data for friends whose **reverse** friendship row has `is_sharing_location = true` (i.e. the friend has opted to share with you).
 >
-> `location.status` reflects the latest ping status (`0` = Safe, `1` = Not Safe, `2` = SOS).
+> **`GET /map/pings`** — Returns ALL pings from the database with optional time filtering. If `window_minutes` is omitted or `0`, all pings are returned (no time cutoff). Results are ordered by most recent first.
 >
-> If `window_minutes` is omitted or `0`, all pings are returned (no time cutoff).
+> `location.status` / `status` reflects the ping status (`0` = Safe, `1` = Not Safe, `2` = SOS).
 
 ---
 
