@@ -92,6 +92,7 @@ def latest_map(
     # log sql query
     # print(f"Executing SQL: {sql}")
 
+
     params: dict = {"current_user_id": current_user.id}
     if cutoff is not None:
         sql += " AND pings.received_at >= :cutoff"
@@ -103,6 +104,9 @@ def latest_map(
     
     # log rows returned from query
     print(f"RYAN: SQL returned {len(rows)} rows")
+    
+    # print raw sql being sent
+    print(f"RYAN: Executing SQL with params {params}:\n{sql}")
     
 
     results: list[MapResult] = []
