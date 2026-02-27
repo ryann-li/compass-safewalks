@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, File, Form, UploadFile
+from fastapi import APIRouter, Depends, logger, status, File, Form, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -88,6 +88,8 @@ async def update_profile(
     import time
     from urllib.parse import quote
     import httpx
+    
+    logger.info(f"RYAN: Updating profile for user {current_user.username} (ID: {current_user.id})")
     
     # Handle profile picture upload if provided
     if profile_picture is not None:

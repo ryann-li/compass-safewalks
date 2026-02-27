@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import verify_tower_key
 from ..models import Ping, Fob, Incident
-# from ..sms import send_sos_sms
+from ..sms import send_sos_sms
 
 
 logger = logging.getLogger("compass.tower")
@@ -86,11 +86,10 @@ def ingest_ping(
                 )
                 db.add(incident)
                 
-                # send_sos_sms(user_info=user_info, lat=payload.lat, lng=payload.lng)
+                send_sos_sms(user_info=user_info, lat=payload.lat, lng=payload.lng)
             else:
                 # Unregistered fob - still send SMS but with fob ID
-                # send_sos_sms(user_info=f"Unregistered FOB {clean_uid}", lat=payload.lat, lng=payload.lng)
-                pass
+                send_sos_sms(user_info=f"Unregistered FOB {clean_uid}", lat=payload.lat, lng=payload.lng)
 
     # 4. FINAL COMMIT
     db.commit()

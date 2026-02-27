@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import get_current_user
 from ..models import Incident, User
-# from ..sms import send_sos_sms
+from ..sms import send_sos_sms
 
 
 logger = logging.getLogger("compass.incidents")
@@ -173,14 +173,13 @@ def create_user_sos(
     # Send SMS alert via Twilio only if no recent SOS
     if should_send_sms:
         user_info = f"{current_user.username} (ID: {current_user.id})"
-        # sms_success = send_sos_sms(
-        #     user_info=user_info,
-        #     lat=payload.lat,
-        #     lng=payload.lng,
-        #     message=payload.message,
-        #     alert_type="USER SOS"
-        # )
-        sms_success = True  # Mock success for now
+        sms_success = send_sos_sms(
+            user_info=user_info,
+            lat=payload.lat,
+            lng=payload.lng,
+            message=payload.message,
+            alert_type="USER SOS"
+        )
         
         if not sms_success:
             logger.error("Failed to send SOS SMS alert")
