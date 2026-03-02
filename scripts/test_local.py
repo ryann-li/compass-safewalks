@@ -198,11 +198,31 @@ def main():
     # Test new all pings endpoint
     print("\n--- Testing All Pings ---")
     all_pings = get_all_pings(BASE, alice_token)
-    print(f"Total pings in database: {len(all_pings['pings'])}")
+    print(f"Latest pings per fob: {len(all_pings['pings'])}")
     
     # Test with time filter (last 60 minutes)
     recent_pings = get_all_pings(BASE, alice_token, window_minutes=60)
-    print(f"Pings in last 60 minutes: {len(recent_pings['pings'])}")
+    print(f"Latest pings per fob in last 60 minutes: {len(recent_pings['pings'])}")
+    
+    # Test that pings endpoint returns only latest ping per fob_uid
+    print("\n--- Testing Pings Deduplication ---")
+    # Send multiple pings for same fob to test deduplication
+    tower_ping(BASE, "FOB_001", 43.4700, 80.5400, status=0)  # Additional ping for FOB_001
+    tower_ping(BASE, "FOB_002", 43.4800, 80.5500, status=1)  # Additional ping for FOB_002
+    
+    # Get all pings again - should still only show latest per fob
+    dedup_pings = get_all_pings(BASE, alice_token)
+    fob_uids_in_response = [ping['fob_uid'] for ping in dedup_pings['pings']]
+    unique_fobs = set(fob_uids_in_response)
+    
+    print(f"Unique fob_uids in pings response: {len(unique_fobs)}")
+    print(f"Total pings returned: {len(dedup_pings['pings'])}")
+    
+    if len(unique_fobs) == len(dedup_pings['pings']):
+        print("✅ PASS: Pings endpoint returns only latest ping per fob_uid")
+    else:
+        print("❌ FAIL: Pings endpoint returned duplicate fob_uids")
+        print(f"Fob UIDs: {fob_uids_in_response}")
     
     print("\n🎉 All tests passed!")
 

@@ -139,30 +139,37 @@ def get_all_pings(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get all pings from the database with optional time filtering."""
-    # Import Ping model here to avoid circular imports
-    from ..models import Ping
+    """Get latest ping for each fob_uid with optional time filtering."""
+    # Use DISTINCT ON(fob_uid) to get only the latest ping per fob
+    sql = """
+    SELECT DISTINCT ON (fob_uid)
+        id, fob_uid, lat, lng, status, received_at
+    FROM pings
+    """
     
-    query = db.query(Ping)
+    params = {}
     
     # Apply time filter if specified
     if window_minutes is not None and window_minutes > 0:
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
-        query = query.filter(Ping.received_at >= cutoff)
+        sql += " WHERE received_at >= :cutoff"
+        params["cutoff"] = cutoff
     
-    # Order by most recent first
-    pings = query.order_by(Ping.received_at.desc()).all()
+    # Order by fob_uid first, then by received_at desc to get latest per fob
+    sql += " ORDER BY fob_uid, received_at DESC"
+    
+    rows = db.execute(text(sql), params).mappings().all()
     
     ping_results = []
-    for ping in pings:
+    for row in rows:
         ping_results.append(
             PingInfo(
-                id=ping.id,
-                fob_uid=ping.fob_uid,
-                lat=ping.lat,
-                lng=ping.lng,
-                status=ping.status,
-                received_at=ping.received_at,
+                id=row["id"],
+                fob_uid=row["fob_uid"],
+                lat=row["lat"],
+                lng=row["lng"],
+                status=row["status"],
+                received_at=row["received_at"],
             )
         )
     
