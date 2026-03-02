@@ -2,7 +2,7 @@
 set -euo pipefail
 
 set -a
-[ -f .env ] && source .env
+[ -f .env ] && source .env.local
 set +a
 
 uvicorn api.index:app --reload

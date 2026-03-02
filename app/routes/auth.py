@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, logger, status, File, Form, UploadFile
+from fastapi import APIRouter, Depends, status, File, Form, UploadFile
+from fastapi.logger import logger
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session

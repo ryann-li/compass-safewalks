@@ -134,6 +134,18 @@ def create_user_sos(
     db: Session = Depends(get_db),
 ):
     """Create an SOS alert from a user (without requiring a fob)."""
+    
+    ten_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
+    recent_sos = db.query(Incident).filter(
+        Incident.reporter_id == current_user.id,
+        Incident.description.like("🚨%SOS%"),
+        Incident.created_at >= ten_minutes_ago
+    ).first()
+    
+    # log recent SOS check
+    if recent_sos:  
+        logger.info(f"User {current_user.username} has a recent SOS alert (ID: {recent_sos.id}, Created At: {recent_sos.created_at})")
+    
     # Create an incident with a special SOS prefix in description
     sos_description = f"🚨 USER SOS ALERT"
     if payload.message:
@@ -149,29 +161,22 @@ def create_user_sos(
     db.commit()
     db.refresh(incident)
     
-    # Log prominently for operations team (similar to tower SOS)    
-    logger.warning(
-        "🚨 USER SOS ALERT: User %s (%s) at %s, %s - Message: %s",
-        current_user.id,
-        current_user.username,
-        payload.lat,
-        payload.lng,
-        payload.message or "No message provided",
-    )
-    
     # Check if user has recent SOS incidents (within last 10 minutes) to avoid SMS spam
-    from sqlalchemy import desc
-    ten_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
-    recent_sos = db.query(Incident).filter(
-        Incident.reporter_id == current_user.id,
-        Incident.description.like("🚨%SOS%"),
-        Incident.created_at >= ten_minutes_ago
-    ).first()
-    
+
     should_send_sms = recent_sos is None
     
     # Send SMS alert via Twilio only if no recent SOS
     if should_send_sms:
+        # Log prominently for operations team (similar to tower SOS)    
+        logger.warning(
+            "🚨 USER SOS ALERT: User %s (%s) at %s, %s - Message: %s",
+            current_user.id,
+            current_user.username,
+            payload.lat,
+            payload.lng,
+            payload.message or "No message provided",
+        )
+    
         user_info = f"{current_user.username} (ID: {current_user.id})"
         sms_success = send_sos_sms(
             user_info=user_info,
